@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { v4 as uuidv4 } from 'uuid';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,13 +18,17 @@ const socket = io(SERVER_URL, {
   path: "/socket.io",
   withCredentials: true
 });
-// Connect to backend server running on 3001
-// const socket = io('http://192.168.56.1:3001/', {
-//   autoConnect: false
-// });
-
 export default function App() {
-  const isAdminRoute = window.location.pathname === '/admin';
+  return (
+    <Routes>
+      <Route path="/" element={<GameApp isAdminRoute={false} />} />
+      <Route path="/admin" element={<GameApp isAdminRoute />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function GameApp({ isAdminRoute }) {
 
   const [name, setName] = useState(() => localStorage.getItem('hyperbuzz_username') || '');
   const [password, setPassword] = useState('');
