@@ -1,0 +1,19 @@
+<svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+  <!-- AI Logo -->
+  <g id="ai-logo">
+    <!-- A letter -->
+    <path d="M 150 400 L 220 150 L 290 400 M 180 280 L 260 280" stroke="#FFA500" stroke-width="20" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- I letter with dots -->
+    <circle cx="380" cy="180" r="25" fill="#FFA500"/>
+    <line x1="380" y1="250" x2="380" y2="400" stroke="#FFA500" stroke-width="20" stroke-linecap="round"/>
+    
+    <!-- Vertical line with dots (creativity indicator) -->
+    <circle cx="450" cy="150" r="15" fill="#FFA500"/>
+    <line x1="450" y1="180" x2="450" y2="380" stroke="#FFA500" stroke-width="15" stroke-linecap="round"/>
+    <circle cx="450" cy="410" r="15" fill="#FFA500"/>
+  </g>
+  
+  <!-- HORIZON text -->
+  <text x="300" y="500" font-size="80" font-weight="bold" text-anchor="middle" fill="#0A5F7F" font-family="Arial, sans-serif">HORIZON</text>
+</svg>
