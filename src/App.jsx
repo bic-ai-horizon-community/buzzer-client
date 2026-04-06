@@ -10,11 +10,15 @@ import { Badge } from "@/components/ui/badge"
 // IMPORT THE SERVER URL FROM AN ENV VARIABLE OR CONFIG FILE IN PRODUCTION
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+
 const socket = io(SERVER_URL, {
-  autoConnect: false
+  autoConnect: false,
+  transports: ["websocket"],
+  path: "/socket.io",
+  withCredentials: true
 });
 // Connect to backend server running on 3001
-// const socket = io('http://100.68.178.30:3001', {
+// const socket = io('http://192.168.56.1:3001/', {
 //   autoConnect: false
 // });
 
