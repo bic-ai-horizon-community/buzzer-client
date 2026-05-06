@@ -572,6 +572,8 @@ function GameApp({ isAdminRoute }) {
   const [correctOption, setCorrectOption] = useState(null);
   // Winner modal data (shared for all users)
   const [winnerData, setWinnerData] = useState(null);
+  // Snapshot of winner + buzzes frozen at reveal time — persists even after reset
+  const [revealSnapshot, setRevealSnapshot] = useState(null);
 
   useEffect(() => {
     const loadingTimer = setTimeout(() => {
@@ -593,6 +595,11 @@ function GameApp({ isAdminRoute }) {
       setBuzzes(state.buzzes || []);
       setOptions(state.options || []);
       if (state.correctOption !== undefined) setCorrectOption(state.correctOption);
+      // Clear reveal snapshot when game resets to WAITING with no buzzes
+      if (state.gameState === 'WAITING' && (!state.buzzes || state.buzzes.length === 0)) {
+        setRevealSnapshot(null);
+        setWinnerData(null);
+      }
     });
 
     socket.on('admin_success', () => {
@@ -608,9 +615,16 @@ function GameApp({ isAdminRoute }) {
       setCorrectOption(co);
     });
 
-    // All users: show winner modal
+    // All users: show winner modal + freeze snapshot
     socket.on('winner_reveal', (data) => {
       setWinnerData(data || null);
+      if (data) {
+        // Capture current buzzes at the time of reveal
+        setBuzzes(prev => {
+          setRevealSnapshot({ winnerData: data, buzzes: prev });
+          return prev;
+        });
+      }
     });
 
     // Auto-reconnect if session data exists
@@ -700,7 +714,10 @@ function GameApp({ isAdminRoute }) {
   const handleResetRound = () => {
     socket.emit('reset_round');
     setCorrectOption(null);
+    // Clear immediately on client for instant feedback;
+    // server will also broadcast game_state WAITING which clears for all clients
     setWinnerData(null);
+    setRevealSnapshot(null);
   };
 
   const handleSetCorrectOption = (opt) => {
@@ -799,7 +816,13 @@ function GameApp({ isAdminRoute }) {
       <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-50 font-sans">
 
       {/* Winner Modal — appears over everything for ALL users */}
-      <WinnerModal winnerData={winnerData} onClose={() => setWinnerData(null)} />
+      <WinnerModal
+        winnerData={winnerData}
+        onClose={() => {
+          // Only close the modal; rankings stay visible until game is reset
+          setWinnerData(null);
+        }}
+      />
 
       {/* Navigation */}
       <header className="w-full py-3 border-b border-zinc-800/50 bg-zinc-950/90 backdrop-blur sticky top-0 z-10 px-4">
@@ -1043,47 +1066,78 @@ function GameApp({ isAdminRoute }) {
         {/* Bottom Section: Rankings & Lobby */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full items-start">
 
-          {/* Rankings Grid Item */}
-          <Card className="bg-zinc-900/80 backdrop-blur border-zinc-800 flex flex-col h-full">
-            <CardHeader className="pb-3">
-              <CardTitle>Rankings (Fastest per Option)</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1">
-              {rankings.length === 0 ? (
-                <p className="text-sm text-zinc-400">No buzzes yet.</p>
-              ) : (
-                <ul className="flex flex-col gap-3">
-                  {rankings.map((buzz, idx) => (
-                    <li
-                      key={idx}
-                      className={`
-                        w-full flex justify-between items-center px-4 py-3 rounded-xl border 
-                        ${idx === 0
-                          ? 'bg-teal-500/10 border-teal-500/40'
-                          : 'bg-zinc-800/50 border-transparent'
-                        }
-                      `}
-                    >
-                      <div className="flex items-baseline gap-2 truncate">
-                        <span className={`text-lg font-black ${idx === 0 ? 'text-teal-400' : 'text-zinc-200'}`}>
-                          #{idx + 1}
-                        </span>
-                        <span className="font-bold text-white truncate">
-                          {buzz.user.name} <span className="opacity-50 font-normal text-sm">@{buzz.user.id.substring(0, 5)}</span>
-                        </span>
-                      </div>
-                      <div className="flex flex-col items-end shrink-0 ml-4">
-                        <span className="font-bold text-teal-400">
-                          {buzz.reactionTimeMs}ms
-                        </span>
-                        {buzz.option && <span className="text-xs text-teal-400/70">Opt: {buzz.option}</span>}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+          {/* Rankings Grid Item — only visible after winner is revealed, uses frozen snapshot */}
+          {revealSnapshot ? (() => {
+            // Show ALL buzzes sorted by reaction time — using the frozen snapshot
+            const allRankings = [...revealSnapshot.buzzes].sort((a, b) => a.reactionTimeMs - b.reactionTimeMs);
+            return (
+              <Card className="bg-zinc-900/80 backdrop-blur border-zinc-800 flex flex-col h-full" style={{ animation: 'slide-up-fade 0.5s ease both' }}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <Trophy size={18} className="text-amber-400" />
+                    Full Rankings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  {allRankings.length === 0 ? (
+                    <p className="text-sm text-zinc-400">No buzzes yet.</p>
+                  ) : (
+                    <ul className="flex flex-col gap-3">
+                      {allRankings.map((buzz, idx) => (
+                        <li
+                          key={idx}
+                          style={{ animation: `slide-up-fade 0.4s ease ${idx * 0.07}s both` }}
+                          className={`
+                            w-full flex justify-between items-center px-4 py-3 rounded-xl border 
+                            ${idx === 0
+                              ? 'bg-amber-500/10 border-amber-400/40'
+                              : idx === 1
+                              ? 'bg-zinc-400/10 border-zinc-400/30'
+                              : idx === 2
+                              ? 'bg-orange-400/10 border-orange-400/30'
+                              : 'bg-zinc-800/50 border-transparent'
+                            }
+                          `}
+                        >
+                          <div className="flex items-baseline gap-2 truncate">
+                            <span className={`text-lg font-black ${
+                              idx === 0 ? 'text-amber-400' :
+                              idx === 1 ? 'text-zinc-300' :
+                              idx === 2 ? 'text-orange-400' :
+                              'text-zinc-500'
+                            }`}>
+                              {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                            </span>
+                            <span className="font-bold text-white truncate">
+                              {buzz.user.name} <span className="opacity-50 font-normal text-sm">@{buzz.user.id.substring(0, 5)}</span>
+                            </span>
+                          </div>
+                          <div className="flex flex-col items-end shrink-0 ml-4">
+                            <span className={`font-bold ${
+                              idx === 0 ? 'text-amber-400' :
+                              idx === 1 ? 'text-zinc-300' :
+                              idx === 2 ? 'text-orange-400' :
+                              'text-teal-400'
+                            }`}>
+                              {buzz.reactionTimeMs}ms
+                            </span>
+                            {buzz.option && <span className="text-xs text-teal-400/70">Opt: {buzz.option}</span>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })() : (
+            <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800/50 flex flex-col h-full items-center justify-center min-h-[180px]">
+              <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+                <Trophy size={32} className="text-zinc-700" />
+                <p className="text-sm text-zinc-500 font-medium">Rankings will be revealed<br />when the winner is announced</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Lobby Grid Item */}
           <Card className="bg-zinc-900/80 backdrop-blur border-zinc-800 flex flex-col h-full">
