@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { v4 as uuidv4 } from 'uuid';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Trophy, Target, Zap, CheckCircle2 } from 'lucide-react';
+import { Trophy, Target, Zap, CheckCircle2, Medal, Lock, Check, Award } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -54,26 +54,32 @@ function ConfettiCanvas() {
       '#a78bfa', '#34d399', '#fb923c', '#60a5fa'
     ];
 
-    const pieces = Array.from({ length: 140 }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height - canvas.height,
-      r: Math.random() * 8 + 4,
-      d: Math.random() * 3 + 1,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      tilt: Math.floor(Math.random() * 15) - 7,
-      tiltAngle: 0,
-      tiltAngleDelta: (Math.random() * 0.07) + 0.05,
-      shape: Math.random() > 0.5 ? 'rect' : 'circle',
-    }));
+    const pieces = Array.from({ length: 140 }, (_, i) => {
+      const layer = i < 50 ? 0 : i < 100 ? 1 : 2;
+      return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height - canvas.height,
+        r: Math.random() * 8 + 4,
+        d: (Math.random() * 3 + 1) * (layer === 0 ? 1 : layer === 1 ? 0.65 : 0.4),
+        color: colors[Math.floor(Math.random() * colors.length)],
+        tilt: Math.floor(Math.random() * 15) - 7,
+        tiltAngle: 0,
+        tiltAngleDelta: (Math.random() * 0.07) + 0.05,
+        shape: Math.random() > 0.5 ? 'rect' : 'circle',
+        blur: layer === 0 ? 0 : layer === 1 ? 1 : 2.5,
+        alpha: layer === 0 ? 0.9 : layer === 1 ? 0.6 : 0.35,
+      };
+    });
 
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       pieces.forEach(p => {
         ctx.save();
+        if (p.blur > 0) ctx.filter = `blur(${p.blur}px)`;
         ctx.translate(p.x + p.tilt, p.y);
         ctx.rotate(p.tiltAngle * Math.PI / 180);
         ctx.fillStyle = p.color;
-        ctx.globalAlpha = 0.85;
+        ctx.globalAlpha = p.alpha;
         if (p.shape === 'rect') {
           ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 1.6);
         } else {
@@ -83,7 +89,7 @@ function ConfettiCanvas() {
         }
         ctx.restore();
 
-        p.y += p.d + 1;
+        p.y += p.d + 0.5;
         p.tiltAngle += p.tiltAngleDelta;
         if (p.y > canvas.height) {
           p.y = -10;
@@ -114,10 +120,14 @@ function ConfettiCanvas() {
 // ─── Winner Modal ─────────────────────────────────────────────────────────────
 function WinnerModal({ winnerData, onClose }) {
   const [visible, setVisible] = useState(false);
+  const [impactFlash, setImpactFlash] = useState(false);
 
   useEffect(() => {
     if (winnerData) {
-      // Brief delay for entrance animation
+      // Impact frame: brief white flash
+      setImpactFlash(true);
+      setTimeout(() => setImpactFlash(false), 280);
+      // Entrance animation
       requestAnimationFrame(() => setVisible(true));
     } else {
       setVisible(false);
@@ -129,18 +139,28 @@ function WinnerModal({ winnerData, onClose }) {
   const { winner, correctOption } = winnerData;
 
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0.75)',
-        backdropFilter: 'blur(6px)',
-        transition: 'opacity 0.4s',
-        opacity: visible ? 1 : 0,
-      }}
-      onClick={onClose}
-    >
-      <ConfettiCanvas />
+    <>
+      {/* White impact flash */}
+      {impactFlash && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(255,255,255,0.7)',
+          animation: 'impact-flash 0.28s ease-out forwards',
+          pointerEvents: 'none',
+        }} />
+      )}
+      <div
+        style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.82)',
+          backdropFilter: 'blur(8px)',
+          transition: 'opacity 0.4s',
+          opacity: visible ? 1 : 0,
+        }}
+        onClick={onClose}
+      >
+        <ConfettiCanvas />
 
       <div
         style={{
@@ -197,11 +217,11 @@ function WinnerModal({ winnerData, onClose }) {
         <div style={{
           background: 'linear-gradient(135deg, rgba(20,20,30,0.97) 0%, rgba(15,25,35,0.97) 100%)',
           border: '2px solid rgba(20,184,166,0.6)',
-          borderRadius: '24px',
-          padding: 'clamp(24px, 6vw, 48px) clamp(28px, 8vw, 64px)',
-          boxShadow: '0 30px 80px rgba(0,0,0,0.7), 0 0 40px rgba(20,184,166,0.25), inset 0 0 40px rgba(20,184,166,0.05)',
-          minWidth: 'min(340px, 90vw)',
-          maxWidth: '90vw',
+          borderRadius: '32px',
+          padding: 'clamp(28px, 8vw, 56px) clamp(20px, 6vw, 64px)',
+          boxShadow: '0 40px 100px rgba(0,0,0,0.8), 0 0 50px rgba(20,184,166,0.2), inset 0 0 50px rgba(20,184,166,0.05)',
+          minWidth: 'min(360px, 92vw)',
+          maxWidth: '92vw',
           position: 'relative',
           overflow: 'hidden',
         }}>
@@ -209,7 +229,7 @@ function WinnerModal({ winnerData, onClose }) {
           <div style={{
             position: 'absolute',
             inset: 0,
-            borderRadius: '24px',
+            borderRadius: '32px',
             padding: '2px',
             background: visible ? 'linear-gradient(45deg, rgba(20,184,166,0.5), transparent, rgba(20,184,166,0.5))' : 'transparent',
             backgroundSize: '300% 300%',
@@ -236,24 +256,22 @@ function WinnerModal({ winnerData, onClose }) {
                 fontSize: 'clamp(40px, 12vw, 72px)',
                 fontWeight: 900,
                 letterSpacing: '-0.02em',
-                background: 'linear-gradient(135deg, #14b8a6 0%, #67e8f9 50%, #a78bfa 100%)',
+                background: 'linear-gradient(135deg, #14b8a6, #67e8f9, #a78bfa, #14b8a6)',
+                backgroundSize: '300% 300%',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
                 margin: '0',
                 lineHeight: 1.1,
                 wordBreak: 'break-word',
-                animation: visible ? 'zoom-in-bounce 0.6s cubic-bezier(0.34,1.56,0.64,1) both 0.5s, text-shimmer 2.5s ease-in-out both 1.1s' : 'none',
-                filter: 'drop-shadow(0px 4px 10px rgba(20,184,166,0.3))',
+                animation: visible ? 'zoom-in-bounce 0.6s cubic-bezier(0.34,1.56,0.64,1) both 0.5s, gradient-move 3s ease infinite' : 'none',
+                filter: 'drop-shadow(0px 4px 14px rgba(20,184,166,0.45))',
               }}>
                 {winner.name}
               </h2>
 
               {/* Stats with staggered animations */}
-              <div style={{
-                display: 'flex', flexDirection: 'column', gap: '14px',
-                justifyContent: 'center', marginTop: '28px',
-              }}>
+              <div className="flex flex-col gap-4 sm:gap-6 justify-center mt-8 sm:mt-12">
                 {/* Selected Option Badge */}
                 {correctOption && (
                   <div style={{
@@ -383,13 +401,18 @@ function WinnerModal({ winnerData, onClose }) {
           0%, 100% { opacity: 0.6; }
           50%      { opacity: 1; }
         }
-        @keyframes gradient-shift {
-          0%   { background-position: 0% center; }
-          50%  { background-position: 100% center; }
-          100% { background-position: 0% center; }
+        @keyframes gradient-move {
+          0%   { background-position: 0% 50%; }
+          50%  { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        @keyframes impact-flash {
+          0%   { opacity: 0.7; }
+          100% { opacity: 0; }
         }
       `}</style>
     </div>
+  </>
   );
 }
 
@@ -564,7 +587,7 @@ function GameApp({ isAdminRoute }) {
   const [gameState, setGameState] = useState('WAITING');
   const [buzzes, setBuzzes] = useState([]);
   const [options, setOptions] = useState([]);
-  const [optionsInput, setOptionsInput] = useState('1, 2, 3, 4');
+  const [optionsInput, setOptionsInput] = useState('');
   const [myUserId, setMyUserId] = useState(() => localStorage.getItem('hyperbuzz_userid') || '');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -574,6 +597,9 @@ function GameApp({ isAdminRoute }) {
   const [winnerData, setWinnerData] = useState(null);
   // Snapshot of winner + buzzes frozen at reveal time — persists even after reset
   const [revealSnapshot, setRevealSnapshot] = useState(null);
+  // Tap feedback
+  const [buzzFlash, setBuzzFlash] = useState(false);
+  const [buzzToast, setBuzzToast] = useState(false);
 
   useEffect(() => {
     const loadingTimer = setTimeout(() => {
@@ -702,6 +728,14 @@ function GameApp({ isAdminRoute }) {
   const handleBuzz = (optionValue = null) => {
     if (gameState === 'OPEN') {
       socket.emit('buzz', { option: optionValue });
+      // Haptic feedback (mobile)
+      if (navigator.vibrate) navigator.vibrate(60);
+      // Screen tint flash
+      setBuzzFlash(true);
+      setTimeout(() => setBuzzFlash(false), 420);
+      // Floating toast
+      setBuzzToast(true);
+      setTimeout(() => setBuzzToast(false), 1400);
     }
   };
 
@@ -734,6 +768,8 @@ function GameApp({ isAdminRoute }) {
   const currentUser = users.find(u => u.id === myUserId);
   const isHost = currentUser?.isHost || false;
   const hasVoted = buzzes.some(b => b.user.id === myUserId);
+  // Focus mode: spotlight the buzzer when round is live and player hasn't voted
+  const focusMode = gameState === 'OPEN' && !hasVoted && !isHost;
 
   // Calculate fastest per option
   const fastestPerOption = {};
@@ -824,9 +860,58 @@ function GameApp({ isAdminRoute }) {
         }}
       />
 
+      {/* Screen tint flash on buzz */}
+      {buzzFlash && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 50,
+            background: 'radial-gradient(circle at center, rgba(20,184,166,0.18) 0%, transparent 70%)',
+            animation: 'buzz-flash 0.42s ease-out forwards',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      {/* Floating ⊡ Locked in! toast */}
+      {buzzToast && (
+        <div
+          style={{
+            position: 'fixed', bottom: '30%', left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 51,
+            background: 'rgba(20,184,166,0.15)',
+            border: '1px solid rgba(20,184,166,0.4)',
+            backdropFilter: 'blur(8px)',
+            borderRadius: '999px',
+            padding: '10px 22px',
+            fontSize: '15px',
+            fontWeight: 700,
+            color: '#5eead4',
+            letterSpacing: '0.03em',
+            whiteSpace: 'nowrap',
+            animation: 'toast-up 1.4s ease-out forwards',
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Zap size={18} fill="#5eead4" />
+          Locked in!
+        </div>
+      )}
+
       {/* Navigation */}
-      <header className="w-full py-3 border-b border-zinc-800/50 bg-zinc-950/90 backdrop-blur sticky top-0 z-10 px-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <header
+        className="w-full py-3 border-b border-white/10 bg-zinc-950/90 backdrop-blur sticky top-0 z-10 px-4"
+        style={{
+          transition: 'opacity 0.5s ease, filter 0.5s ease',
+          opacity: focusMode ? 0.15 : 1,
+          filter: focusMode ? 'blur(3px)' : 'none',
+          pointerEvents: focusMode ? 'none' : 'auto',
+        }}
+      >
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-6 sm:gap-10">
           <div className="flex items-center gap-3 shrink-0">
             {/* College Logo */}
             <img 
@@ -844,7 +929,7 @@ function GameApp({ isAdminRoute }) {
             {/* LOGO FOR AI HORIZON */}
             <img src="image-removebg-preview.png" alt="AI Horizon" className="h-16 w-auto" />
           </div>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className="flex items-center gap-1.5 bg-zinc-900/90 px-3 py-1.5 rounded-full border border-zinc-800 min-w-0 overflow-hidden">
               <span className="text-xs sm:text-sm font-medium truncate">
                 <strong className="text-white">{currentUser?.name}</strong>
@@ -865,9 +950,9 @@ function GameApp({ isAdminRoute }) {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-grow w-full max-w-5xl mx-auto py-4 sm:py-6 md:py-8 px-3 sm:px-4 flex flex-col gap-4 sm:gap-6">
+      <main className="flex-grow w-full max-w-5xl mx-auto py-6 sm:py-10 md:py-12 px-4 sm:px-6 flex flex-col gap-6 sm:gap-10">
 
-        {/* Host Controls */}
+        {/* Host Controls — always full opacity for host */}
         {isHost && (
           <Card className="bg-zinc-900/80 backdrop-blur border-zinc-800">
             <CardHeader className="pb-3">
@@ -996,12 +1081,55 @@ function GameApp({ isAdminRoute }) {
         )}
 
         {/* Jumbo Buzzer Display */}
-        <Card className="flex flex-col items-center justify-center py-10 sm:py-16 md:py-24 bg-zinc-900/50 backdrop-blur border-zinc-800 overflow-hidden relative">
-          <h2 className={`text-3xl sm:text-4xl md:text-5xl font-black mb-8 sm:mb-12 tracking-tight transition-opacity duration-300 ${gameState === 'WAITING' ? 'opacity-30' : 'opacity-100 text-teal-400'}`}>
-            {gameState === 'WAITING' ? 'READY?' : hasVoted ? 'VOTED' : 'GO GO GO!'}
-          </h2>
+        <Card
+          className="flex flex-col items-center justify-center py-12 sm:py-20 md:py-32 bg-white/5 backdrop-blur border-white/10 overflow-hidden relative rounded-[2rem]"
+          style={{
+            transition: 'transform 0.4s ease, box-shadow 0.4s ease',
+            transform: focusMode ? 'scale(1.02)' : 'scale(1)',
+            boxShadow: focusMode ? '0 0 60px rgba(20,184,166,0.15)' : 'none',
+          }}
+        >
+          {/* Status heading with pulsing dot */}
+          <div className="flex flex-col items-center gap-4 sm:gap-6 mb-10 sm:mb-16">
+            <div className="flex items-center gap-3 sm:gap-4">
+              {/* State dot */}
+              <span style={{
+                display: 'inline-block',
+                width: 'clamp(10px, 2vw, 14px)', height: 'clamp(10px, 2vw, 14px)',
+                borderRadius: '50%',
+                background: gameState === 'OPEN' && !hasVoted ? '#14b8a6' : hasVoted ? '#14b8a6' : '#52525b',
+                boxShadow: gameState === 'OPEN' && !hasVoted ? '0 0 15px rgba(20,184,166,0.9)' : 'none',
+                animation: gameState === 'OPEN' && !hasVoted
+                  ? 'dot-pulse 0.9s ease-in-out infinite'
+                  : 'dot-breathe 3s ease-in-out infinite',
+                flexShrink: 0,
+              }} />
+              <h2
+                className="tracking-tighter font-black leading-none"
+                style={{
+                  fontSize: gameState === 'OPEN' ? 'clamp(2.8rem, 10vw, 5.5rem)' : 'clamp(2.2rem, 8vw, 4rem)',
+                  color: gameState === 'WAITING' ? 'rgba(255,255,255,0.2)' : hasVoted ? '#5eead4' : '#14b8a6',
+                  transition: 'all 0.3s ease',
+                  animation: gameState === 'OPEN' && !hasVoted ? 'flash-in 0.35s ease both' : 'none',
+                  textShadow: gameState === 'OPEN' && !hasVoted ? '0 0 30px rgba(20,184,166,0.3)' : 'none',
+                }}
+              >
+                {gameState === 'WAITING' ? 'READY' : hasVoted ? 'LOCKED IN' : 'GO!'}
+              </h2>
+            </div>
+            {/* Live buzz counter */}
+            {gameState === 'OPEN' && buzzes.length > 0 && (
+              <div
+                style={{ animation: 'slide-up-fade 0.3s ease both' }}
+                className="flex items-center gap-2 bg-teal-500/10 border border-teal-500/30 rounded-full px-4 py-1.5 shadow-[0_0_15px_rgba(20,184,166,0.1)]"
+              >
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#14b8a6', display: 'inline-block', animation: 'dot-pulse 0.9s ease-in-out infinite' }} />
+                <span className="text-xs sm:text-sm font-bold text-teal-400 tracking-wide uppercase">{buzzes.length} buzzed in</span>
+              </div>
+            )}
+          </div>
 
-          <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 justify-center max-w-4xl mx-auto px-3 sm:px-4">
+          <div className="flex flex-wrap gap-4 sm:gap-6 md:gap-8 justify-center max-w-4xl mx-auto px-4">
             {options && options.length > 0 ? (() => {
               const myVote = buzzes.find(b => b.user.id === myUserId)?.option ?? null;
               return options.map(opt => {
@@ -1012,28 +1140,33 @@ function GameApp({ isAdminRoute }) {
                     key={opt}
                     disabled={gameState !== 'OPEN' || hasVoted}
                     onClick={() => handleBuzz(opt)}
+                    style={{
+                      cursor: isMyVote ? 'default' : isOtherVoted ? 'not-allowed' : gameState === 'OPEN' ? 'crosshair' : 'not-allowed',
+                      animation: isMyVote ? 'none' : gameState === 'WAITING' ? 'breathe 3s ease-in-out infinite' : 'none',
+                    }}
                     className={`
                         relative group shrink-0
                         w-28 h-28 sm:w-40 sm:h-40 md:w-52 md:h-52
                         rounded-2xl md:rounded-3xl flex flex-col items-center justify-center p-3 gap-1
                         text-2xl sm:text-3xl md:text-5xl font-black text-white
-                        transition-all duration-200 break-words
+                        transition-all duration-150 break-words select-none
                         ${isMyVote
-                        ? 'bg-gradient-to-br from-teal-500 to-teal-700 border-2 border-teal-300/60 shadow-[0_0_30px_rgba(20,184,166,0.4)] cursor-default scale-105'
+                        ? 'bg-gradient-to-br from-teal-500 to-teal-700 border-2 border-teal-300/60 shadow-[0_0_40px_rgba(20,184,166,0.5)] scale-105'
                         : isOtherVoted
-                          ? 'bg-zinc-800 cursor-not-allowed opacity-40 border border-zinc-700'
+                          ? 'bg-zinc-800/60 opacity-25 border border-white/5 grayscale'
                           : gameState === 'OPEN'
-                            ? 'bg-gradient-to-br from-teal-400 to-teal-700 cursor-pointer hover:brightness-110 active:scale-95 shadow-[0_10px_25px_rgba(0,0,0,0.5),inset_0_5px_15px_rgba(255,255,255,0.2)] animate-[pulse-glow_2s_infinite]'
-                            : 'bg-gradient-to-br from-zinc-600 to-zinc-800 cursor-not-allowed shadow-[0_10px_25px_rgba(0,0,0,0.5),inset_0_5px_15px_rgba(255,255,255,0.1)] opacity-70'
+                            ? 'bg-gradient-to-br from-teal-400 to-teal-700 hover:brightness-110 active:scale-95 hover:scale-105 shadow-[0_10px_30px_rgba(0,0,0,0.5),inset_0_5px_15px_rgba(255,255,255,0.2)] animate-[pulse-glow_2s_infinite]'
+                            : 'bg-gradient-to-br from-zinc-600 to-zinc-800 shadow-[0_10px_25px_rgba(0,0,0,0.5),inset_0_5px_15px_rgba(255,255,255,0.05)] opacity-60'
                       }
-                       `}
+                    `}
                   >
                     <span className="w-full text-center leading-tight md:whitespace-normal break-words">
                       {opt}
                     </span>
                     {isMyVote && (
-                      <span className="text-xs sm:text-sm font-bold tracking-widest text-teal-100 bg-teal-900/60 px-2 py-0.5 rounded-full">
-                        VOTED
+                      <span className="text-xs sm:text-sm font-black tracking-widest text-teal-100 bg-teal-900/70 px-3 py-1 rounded-full flex items-center gap-1">
+                        <Lock size={12} className="shrink-0" />
+                        LOCKED
                       </span>
                     )}
                   </button>
@@ -1043,35 +1176,47 @@ function GameApp({ isAdminRoute }) {
               <button
                 disabled={gameState !== 'OPEN' || hasVoted}
                 onClick={() => handleBuzz()}
+                style={{
+                  cursor: hasVoted ? 'default' : gameState === 'OPEN' ? 'crosshair' : 'not-allowed',
+                  animation: !hasVoted && gameState === 'WAITING' ? 'breathe 3s ease-in-out infinite' : 'none',
+                }}
                 className={`
-                  relative 
+                  relative
                   w-48 h-48 sm:w-64 sm:h-64 md:w-80 md:h-80
                   rounded-full flex items-center justify-center
                   text-4xl sm:text-5xl md:text-7xl font-black text-white
-                  transition-all duration-150
+                  transition-all duration-150 select-none
                   ${hasVoted
-                    ? 'bg-gradient-to-br from-teal-600 to-teal-800 cursor-default border-4 border-teal-400/40 shadow-[0_0_30px_rgba(20,184,166,0.3)]'
+                    ? 'bg-gradient-to-br from-teal-600 to-teal-800 border-4 border-teal-400/40 shadow-[0_0_40px_rgba(20,184,166,0.4)]'
                     : gameState === 'OPEN'
-                      ? 'bg-gradient-to-br from-teal-400 to-teal-700 cursor-pointer hover:brightness-110 active:scale-95 shadow-[0_10px_25px_rgba(0,0,0,0.5),inset_0_5px_15px_rgba(255,255,255,0.2)] animate-[pulse-glow_2s_infinite]'
-                      : 'bg-gradient-to-br from-zinc-600 to-zinc-800 cursor-not-allowed shadow-[0_10px_25px_rgba(0,0,0,0.5),inset_0_5px_15px_rgba(255,255,255,0.1)] opacity-70'
+                      ? 'bg-gradient-to-br from-teal-400 to-teal-700 hover:brightness-110 active:scale-95 hover:scale-105 shadow-[0_10px_30px_rgba(0,0,0,0.5),inset_0_5px_15px_rgba(255,255,255,0.2)] animate-[pulse-glow_2s_infinite]'
+                      : 'bg-gradient-to-br from-zinc-700 to-zinc-900 shadow-[0_10px_25px_rgba(0,0,0,0.5),inset_0_5px_15px_rgba(255,255,255,0.05)] opacity-60'
                   }
                 `}
               >
-                {hasVoted ? 'VOTED' : (gameState === 'WAITING' ? 'LOCKED' : 'BUZZ!')}
+                {hasVoted ? <Check size={56} strokeWidth={3} /> : (gameState === 'WAITING' ? 'READY' : 'BUZZ!')}
               </button>
             )}
           </div>
         </Card>
 
-        {/* Bottom Section: Rankings & Lobby */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full items-start">
+        {/* Bottom Section: Rankings & Lobby — fade when in focus mode */}
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10 w-full items-start"
+          style={{
+            transition: 'opacity 0.5s ease, filter 0.5s ease',
+            opacity: focusMode ? 0.15 : 1,
+            filter: focusMode ? 'blur(3px)' : 'none',
+            pointerEvents: focusMode ? 'none' : 'auto',
+          }}
+        >
 
           {/* Rankings Grid Item — only visible after winner is revealed, uses frozen snapshot */}
           {revealSnapshot ? (() => {
-            // Show ALL buzzes sorted by reaction time — using the frozen snapshot
             const allRankings = [...revealSnapshot.buzzes].sort((a, b) => a.reactionTimeMs - b.reactionTimeMs);
+            const maxTime = allRankings.length > 0 ? allRankings[allRankings.length - 1].reactionTimeMs : 1;
             return (
-              <Card className="bg-zinc-900/80 backdrop-blur border-zinc-800 flex flex-col h-full" style={{ animation: 'slide-up-fade 0.5s ease both' }}>
+              <Card className="bg-white/5 backdrop-blur border-white/10 flex flex-col h-full rounded-2xl" style={{ animation: 'slide-up-fade 0.5s ease both' }}>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2">
                     <Trophy size={18} className="text-amber-400" />
@@ -1083,55 +1228,63 @@ function GameApp({ isAdminRoute }) {
                     <p className="text-sm text-zinc-400">No buzzes yet.</p>
                   ) : (
                     <ul className="flex flex-col gap-3">
-                      {allRankings.map((buzz, idx) => (
-                        <li
-                          key={idx}
-                          style={{ animation: `slide-up-fade 0.4s ease ${idx * 0.07}s both` }}
-                          className={`
-                            w-full flex justify-between items-center px-4 py-3 rounded-xl border 
-                            ${idx === 0
-                              ? 'bg-amber-500/10 border-amber-400/40'
-                              : idx === 1
-                              ? 'bg-zinc-400/10 border-zinc-400/30'
-                              : idx === 2
-                              ? 'bg-orange-400/10 border-orange-400/30'
-                              : 'bg-zinc-800/50 border-transparent'
-                            }
-                          `}
-                        >
-                          <div className="flex items-baseline gap-2 truncate">
-                            <span className={`text-lg font-black ${
-                              idx === 0 ? 'text-amber-400' :
-                              idx === 1 ? 'text-zinc-300' :
-                              idx === 2 ? 'text-orange-400' :
-                              'text-zinc-500'
-                            }`}>
-                              {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
-                            </span>
-                            <span className="font-bold text-white truncate">
-                              {buzz.user.name} <span className="opacity-50 font-normal text-sm">@{buzz.user.id.substring(0, 5)}</span>
-                            </span>
-                          </div>
-                          <div className="flex flex-col items-end shrink-0 ml-4">
-                            <span className={`font-bold ${
-                              idx === 0 ? 'text-amber-400' :
-                              idx === 1 ? 'text-zinc-300' :
-                              idx === 2 ? 'text-orange-400' :
-                              'text-teal-400'
-                            }`}>
-                              {buzz.reactionTimeMs}ms
-                            </span>
-                            {buzz.option && <span className="text-xs text-teal-400/70">Opt: {buzz.option}</span>}
-                          </div>
-                        </li>
-                      ))}
+                      {allRankings.map((buzz, idx) => {
+                        const barColor = idx === 0 ? '#fbbf24' : idx === 1 ? '#d1d5db' : idx === 2 ? '#fb923c' : '#14b8a6';
+                        const barWidth = Math.round((buzz.reactionTimeMs / maxTime) * 100);
+                        return (
+                          <li
+                            key={idx}
+                            style={{ animation: `slide-up-fade 0.4s ease ${idx * 0.08}s both` }}
+                            className={`w-full flex flex-col gap-1.5 px-4 py-3 rounded-2xl border ${
+                              idx === 0 ? 'bg-amber-500/10 border-amber-400/30' :
+                              idx === 1 ? 'bg-white/5 border-white/10' :
+                              idx === 2 ? 'bg-orange-400/10 border-orange-400/25' :
+                              'bg-white/[0.03] border-transparent'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-baseline gap-2 truncate">
+                                <span className={`text-lg font-black flex items-center justify-center w-8 h-8 ${
+                                  idx === 0 ? 'text-amber-400' : idx === 1 ? 'text-zinc-300' : idx === 2 ? 'text-orange-400' : 'text-zinc-500'
+                                }`}>
+                                  {idx === 0 ? <Medal size={22} fill="currentColor" /> : 
+                                   idx === 1 ? <Medal size={22} fill="currentColor" /> : 
+                                   idx === 2 ? <Medal size={22} fill="currentColor" /> : 
+                                   <span className="text-sm font-bold opacity-60">#{idx + 1}</span>}
+                                </span>
+                                <span className="font-extrabold text-white truncate">
+                                  {buzz.user.name}
+                                  <span className="opacity-40 font-normal text-xs ml-1">@{buzz.user.id.substring(0, 5)}</span>
+                                </span>
+                              </div>
+                              <span className="font-bold text-sm shrink-0 ml-3" style={{ color: barColor }}>
+                                {buzz.reactionTimeMs}ms
+                              </span>
+                            </div>
+                            {/* Animated progress bar */}
+                            <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                              <div
+                                style={{
+                                  height: '100%',
+                                  borderRadius: '999px',
+                                  background: barColor,
+                                  '--bar-w': `${barWidth}%`,
+                                  width: `${barWidth}%`,
+                                  animation: `bar-fill 0.9s cubic-bezier(0.22,1,0.36,1) ${idx * 0.08 + 0.3}s both`,
+                                  boxShadow: `0 0 8px ${barColor}80`,
+                                }}
+                              />
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </CardContent>
               </Card>
             );
           })() : (
-            <Card className="bg-zinc-900/50 backdrop-blur border-zinc-800/50 flex flex-col h-full items-center justify-center min-h-[180px]">
+            <Card className="bg-white/5 backdrop-blur border-white/10 flex flex-col h-full items-center justify-center min-h-[180px] rounded-2xl">
               <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
                 <Trophy size={32} className="text-zinc-700" />
                 <p className="text-sm text-zinc-500 font-medium">Rankings will be revealed<br />when the winner is announced</p>
@@ -1140,7 +1293,7 @@ function GameApp({ isAdminRoute }) {
           )}
 
           {/* Lobby Grid Item */}
-          <Card className="bg-zinc-900/80 backdrop-blur border-zinc-800 flex flex-col h-full">
+          <Card className="bg-white/5 backdrop-blur border-white/10 flex flex-col h-full rounded-2xl">
             <CardHeader className="pb-3">
               <CardTitle>Lobby ({users.length})</CardTitle>
             </CardHeader>
@@ -1150,13 +1303,13 @@ function GameApp({ isAdminRoute }) {
                   <li
                     key={u.id}
                     className={`
-                      w-full flex justify-between items-center px-4 py-3 rounded-xl 
-                      bg-zinc-800/50 border-l-4 
-                      ${u.isHost ? 'border-l-teal-500' : 'border-l-transparent'}
+                      w-full flex justify-between items-center px-4 py-3 rounded-2xl 
+                      bg-white/[0.04] border border-white/[0.06]
+                      ${u.isHost ? 'border-l-4 border-l-teal-500' : ''}
                     `}
                   >
-                    <span className="font-medium text-zinc-200 truncate pr-2">
-                      {u.name} <span className="opacity-50 text-sm">@{u.id.substring(0, 5)}</span>
+                    <span className="font-semibold text-zinc-200 truncate pr-2">
+                      {u.name} <span className="opacity-40 text-sm">@{u.id.substring(0, 5)}</span>
                       {u.id === myUserId && <span className="text-teal-400 ml-2 font-bold">(You)</span>}
                     </span>
                     {u.isHost && <Badge className="bg-teal-700 hover:bg-teal-700 font-bold shrink-0">HOST</Badge>}
@@ -1192,6 +1345,45 @@ function GameApp({ isAdminRoute }) {
         @keyframes shine {
           0%   { transform: translateX(-100%); }
           100% { transform: translateX(200%); }
+        }
+        @keyframes buzz-flash {
+          0%   { opacity: 1; }
+          100% { opacity: 0; }
+        }
+        @keyframes toast-up {
+          0%   { opacity: 0; transform: translateX(-50%) translateY(0); }
+          20%  { opacity: 1; transform: translateX(-50%) translateY(-16px); }
+          70%  { opacity: 1; transform: translateX(-50%) translateY(-24px); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-40px); }
+        }
+        @keyframes breathe {
+          0%, 100% { transform: scale(1); }
+          50%       { transform: scale(1.03); }
+        }
+        @keyframes dot-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: 0.4; transform: scale(0.65); }
+        }
+        @keyframes dot-breathe {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50%       { opacity: 0.7; transform: scale(1.2); }
+        }
+        @keyframes flash-in {
+          0%   { opacity: 0; transform: scale(1.25); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes bar-fill {
+          from { width: 0 !important; }
+          to   { width: var(--bar-w, 100%); }
+        }
+        @keyframes gradient-move {
+          0%   { background-position: 0% 50%; }
+          50%  { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        @keyframes slide-up-fade {
+          0%   { opacity: 0; transform: translateY(16px); }
+          100% { opacity: 1; transform: translateY(0); }
         }
       `}</style>
 
