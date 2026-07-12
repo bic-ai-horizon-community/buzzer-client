@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { v4 as uuidv4 } from 'uuid';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Trophy, Target, Zap, CheckCircle2, Medal, Lock, Check, Award } from 'lucide-react';
+import { Trophy, Target, Zap, CheckCircle2, Medal, Lock, Check, Award, MonitorPlay } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,8 +27,220 @@ export default function App() {
     <Routes>
       <Route path="/" element={<GameApp isAdminRoute={false} />} />
       <Route path="/admin" element={<GameApp isAdminRoute />} />
+      <Route path="/tv" element={<RankingsPopout />} />
+      <Route path="/rankings" element={<RankingsPopout />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  );
+}
+
+// ─── Live Rankings Pop-out ─────────────────────────────────────────────────
+function RankingsPopout() {
+  const [gameState, setGameState] = useState('WAITING');
+  const [buzzes, setBuzzes] = useState([]);
+  const [options, setOptions] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [winnerData, setWinnerData] = useState(null);
+  const [revealSnapshot, setRevealSnapshot] = useState(null);
+  const [revealBurst, setRevealBurst] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    const handleConnect = () => {
+      setIsConnected(true);
+      socket.emit('tv_register');
+    };
+    const handleDisconnect = () => setIsConnected(false);
+    const handleUsersUpdate = (updatedUsers) => setUsers(updatedUsers);
+    const handleGameState = (state) => {
+      setGameState(state.gameState || 'WAITING');
+      setBuzzes(state.buzzes || []);
+      setOptions(state.options || []);
+      if ((state.gameState === 'WAITING' || state.gameState === 'OPEN') && (!state.buzzes || state.buzzes.length === 0)) {
+        setRevealSnapshot(null);
+        setWinnerData(null);
+      }
+    };
+    const handleWinnerReveal = (data) => {
+      setWinnerData(data || null);
+      if (data) {
+        setRevealBurst(true);
+        setTimeout(() => setRevealBurst(false), 900);
+        setBuzzes(prev => {
+          setRevealSnapshot({ winnerData: data, buzzes: [...prev] });
+          return prev;
+        });
+      }
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('users_update', handleUsersUpdate);
+    socket.on('game_state', handleGameState);
+    socket.on('winner_reveal', handleWinnerReveal);
+
+    socket.connect();
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('users_update', handleUsersUpdate);
+      socket.off('game_state', handleGameState);
+      socket.off('winner_reveal', handleWinnerReveal);
+    };
+  }, []);
+
+  const sourceBuzzes = revealSnapshot?.buzzes ?? buzzes;
+  const rankings = [...sourceBuzzes].sort((a, b) => a.reactionTimeMs - b.reactionTimeMs);
+  const topColor = gameState === 'OPEN' ? '#14b8a6' : gameState === 'WAITING' ? '#71717a' : '#fbbf24';
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.18),_transparent_45%),linear-gradient(135deg,_#09090b_0%,_#111827_70%,_#030712_100%)] text-zinc-50 p-4 sm:p-6 lg:p-8">
+      {revealBurst && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 80, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 42%)', animation: 'reveal-burst-tv 0.7s ease-out forwards' }} />
+          <div style={{ width: 'min(54vw, 32rem)', height: 'min(54vw, 32rem)', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.16)', boxShadow: '0 0 0 0 rgba(255,255,255,0)', animation: 'winner-ring-tv 0.75s ease-out forwards' }} />
+        </div>
+      )}
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+        <header className="rounded-[2rem] border border-white/10 bg-white/5 p-5 sm:p-7 backdrop-blur-xl shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="flex items-center gap-4">
+                <div className="rounded-2xl border border-teal-400/50 bg-teal-500/20 p-3 shadow-[0_0_30px_rgba(45,212,191,0.3)]">
+                  <MonitorPlay size={28} className="text-teal-300" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.4em] text-teal-300/90 mb-1">Spectator Mode</p>
+                  <h1 className="text-4xl sm:text-5xl font-black tracking-tight bg-gradient-to-br from-white via-white to-white/60 bg-clip-text text-transparent">Live Leaderboard</h1>
+                </div>
+              </div>
+              <p className="mt-4 max-w-2xl text-base sm:text-lg text-zinc-400 font-medium">
+                Watch the action unfold live in real time.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-white/10 bg-zinc-900/80 px-3 py-1.5 text-sm font-semibold text-zinc-200">
+                {gameState === 'OPEN' ? 'Round Open' : gameState === 'WAITING' ? 'Waiting for Round' : 'Winner Revealed'}
+              </span>
+              <span className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold" style={{ borderColor: `${topColor}40`, color: topColor, backgroundColor: `${topColor}14` }}>
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: topColor }} />
+                {isConnected ? 'Live' : 'Connecting'}
+              </span>
+            </div>
+          </div>
+        </header>
+
+        <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+          <Card className="border-white/10 bg-zinc-900/80 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
+            <CardHeader className="pb-4 border-b border-white/5">
+              <CardTitle className="flex items-center gap-3 text-2xl font-black tracking-tight">
+                <div className="rounded-full bg-amber-500/20 p-1.5">
+                  <Trophy size={20} className="text-amber-400" />
+                </div>
+                Live Ranking Board
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {rankings.length === 0 ? (
+                <div className="flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-8 text-center">
+                  <Trophy size={38} className="mb-3 text-zinc-700" />
+                  <p className="text-lg font-semibold text-zinc-300">No buzzes yet.</p>
+                  <p className="mt-2 text-sm text-zinc-500">The leaderboard will appear here once the round is live.</p>
+                </div>
+              ) : (
+                <ul className="flex flex-col gap-3">
+                  {rankings.map((buzz, idx) => {
+                    const barColor = idx === 0 ? '#fbbf24' : idx === 1 ? '#d1d5db' : idx === 2 ? '#fb923c' : '#14b8a6';
+                    const maxTime = rankings[rankings.length - 1]?.reactionTimeMs || 1;
+                    const barWidth = Math.max(14, Math.round((buzz.reactionTimeMs / maxTime) * 100));
+                    return (
+                      <li key={`${buzz.user.id}-${idx}`} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className={`flex h-10 w-10 items-center justify-center rounded-xl text-lg font-black ${idx === 0 ? 'bg-amber-500/15 text-amber-400' : idx === 1 ? 'bg-zinc-500/15 text-zinc-300' : idx === 2 ? 'bg-orange-500/15 text-orange-400' : 'bg-teal-500/10 text-teal-300'}`}>
+                              {idx + 1}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-lg font-extrabold text-white">{buzz.user.name}</p>
+                              <p className="text-sm text-zinc-500">@{buzz.user.id.substring(0, 5)} • {buzz.option || 'No option'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-black" style={{ color: barColor }}>{buzz.reactionTimeMs}ms</p>
+                            {winnerData?.winner?.id === buzz.user.id && (
+                              <span className="mt-1 inline-flex items-center rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400">
+                                Winner
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                          <div className="h-full rounded-full" style={{ width: `${barWidth}%`, background: barColor, boxShadow: `0 0 10px ${barColor}70` }} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-col gap-6">
+            <Card className="border-white/10 bg-zinc-900/80 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
+              <CardHeader className="pb-4 border-b border-white/5">
+                <CardTitle className="text-xl font-bold">Round Snapshot</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 pt-6">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-sm font-semibold uppercase tracking-[0.3em] text-zinc-500">Status</p>
+                  <p className="mt-2 text-2xl font-black text-white">{gameState === 'OPEN' ? 'Buzzing now' : gameState === 'WAITING' ? 'Ready for next round' : 'Winner revealed'}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <p className="text-sm font-semibold uppercase tracking-[0.3em] text-zinc-500">Options</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {options.length > 0 ? options.map(opt => (
+                      <span key={opt} className="rounded-full border border-teal-500/25 bg-teal-500/10 px-3 py-1.5 text-sm font-semibold text-teal-300">{opt}</span>
+                    )) : <span className="text-sm text-zinc-500">No options set yet.</span>}
+                  </div>
+                </div>
+                {winnerData?.winner && (
+                  <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+                    <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-300">Latest Winner</p>
+                    <p className="mt-2 text-2xl font-black text-white">{winnerData.winner.name}</p>
+                    <p className="mt-1 text-sm text-amber-100/80">{winnerData.winner.reactionTimeMs}ms • {winnerData.winner.option || 'Global'}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-zinc-900/80 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
+              <CardHeader className="pb-4 border-b border-white/5">
+                <CardTitle className="text-xl font-bold">Audience Lobby</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <ul className="flex flex-col gap-2">
+                  {users.length === 0 ? (
+                    <li className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-4 text-sm text-zinc-500">Waiting for players to join.</li>
+                  ) : users.map(user => (
+                    <li key={user.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3">
+                      <span className="truncate font-semibold text-zinc-200">{user.name}</span>
+                      {user.isHost && <Badge className="bg-teal-600 hover:bg-teal-600 font-bold">HOST</Badge>}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+      
+      {/* Winner Modal — appears over everything for TV view */}
+      <WinnerModal
+        winnerData={winnerData}
+        onClose={() => setWinnerData(null)}
+      />
+    </div>
   );
 }
 
@@ -597,6 +809,8 @@ function GameApp({ isAdminRoute }) {
   const [winnerData, setWinnerData] = useState(null);
   // Snapshot of winner + buzzes frozen at reveal time — persists even after reset
   const [revealSnapshot, setRevealSnapshot] = useState(null);
+  // Reveal burst animation for the winner announcement
+  const [revealBurst, setRevealBurst] = useState(false);
   // Tap feedback
   const [buzzFlash, setBuzzFlash] = useState(false);
   const [buzzToast, setBuzzToast] = useState(false);
@@ -645,6 +859,8 @@ function GameApp({ isAdminRoute }) {
     socket.on('winner_reveal', (data) => {
       setWinnerData(data || null);
       if (data) {
+        setRevealBurst(true);
+        setTimeout(() => setRevealBurst(false), 1400);
         // Capture current buzzes at the time of reveal
         setBuzzes(prev => {
           setRevealSnapshot({ winnerData: data, buzzes: prev });
@@ -752,6 +968,7 @@ function GameApp({ isAdminRoute }) {
     // server will also broadcast game_state WAITING which clears for all clients
     setWinnerData(null);
     setRevealSnapshot(null);
+    setRevealBurst(false);
   };
 
   const handleSetCorrectOption = (opt) => {
@@ -762,6 +979,8 @@ function GameApp({ isAdminRoute }) {
   };
 
   const handleRevealWinner = () => {
+    setRevealBurst(true);
+    setTimeout(() => setRevealBurst(false), 1400);
     socket.emit('reveal_winner');
   };
 
@@ -851,6 +1070,33 @@ function GameApp({ isAdminRoute }) {
       <Loader isLoading={isLoading} />
       <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-50 font-sans">
 
+      {revealBurst && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 90, pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute', inset: 0,
+              background: 'radial-gradient(circle, rgba(251,191,36,0.24) 0%, rgba(20,184,166,0.12) 38%, rgba(0,0,0,0) 72%)',
+              animation: 'reveal-burst 1.4s ease-out forwards',
+            }}
+          />
+          <div
+            style={{
+              width: 'min(76vw, 42rem)', height: 'min(76vw, 42rem)',
+              borderRadius: '50%',
+              border: '2px solid rgba(251,191,36,0.45)',
+              boxShadow: '0 0 0 0 rgba(251,191,36,0.4), inset 0 0 40px rgba(251,191,36,0.18)',
+              animation: 'winner-ring 1.35s ease-out forwards',
+            }}
+          />
+        </div>
+      )}
+
       {/* Winner Modal — appears over everything for ALL users */}
       <WinnerModal
         winnerData={winnerData}
@@ -937,6 +1183,20 @@ function GameApp({ isAdminRoute }) {
               </span>
               {isHost && <Badge className="bg-teal-600 hover:bg-teal-600 font-bold text-xs shrink-0">HOST</Badge>}
             </div>
+            {isAdminRoute && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const popup = window.open('/tv', 'hyperbuzz-rankings', 'width=1400,height=900,toolbar=no,menubar=no,location=no,status=no');
+                  if (popup) popup.focus();
+                }}
+                className="rounded-full border-teal-700/70 text-teal-300 hover:text-white hover:bg-zinc-800 shrink-0 text-xs px-3"
+              >
+                <MonitorPlay size={14} className="mr-1.5" />
+                TV View
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -1349,6 +1609,26 @@ function GameApp({ isAdminRoute }) {
         @keyframes buzz-flash {
           0%   { opacity: 1; }
           100% { opacity: 0; }
+        }
+        @keyframes reveal-burst {
+          0%   { opacity: 0; transform: scale(0.9); }
+          15%  { opacity: 0.85; transform: scale(1.02); }
+          100% { opacity: 0; transform: scale(1.18); }
+        }
+        @keyframes winner-ring {
+          0%   { transform: scale(0.5); opacity: 0; }
+          25%  { opacity: 1; }
+          100% { transform: scale(1.08); opacity: 0; }
+        }
+        @keyframes reveal-burst-tv {
+          0%   { opacity: 0; transform: scale(1); }
+          10%  { opacity: 0.88; transform: scale(1); }
+          100% { opacity: 0; transform: scale(1.04); }
+        }
+        @keyframes winner-ring-tv {
+          0%   { transform: scale(0.75); opacity: 0; }
+          15%  { opacity: 1; }
+          100% { transform: scale(1.01); opacity: 0; }
         }
         @keyframes toast-up {
           0%   { opacity: 0; transform: translateX(-50%) translateY(0); }
